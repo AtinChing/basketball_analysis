@@ -8,6 +8,8 @@ from ball_aquisition import BallAquisitionDetector
 from pass_and_interception_detector import PassAndInterceptionDetector
 from tactical_view_converter import TacticalViewConverter
 from speed_and_distance_calculator import SpeedAndDistanceCalculator
+from basketball_statistics_calculator import print_four_factors_summary
+from free_throw_detector import FreeThrowDetector
 from drawers import (
     PlayerTracksDrawer, 
     BallTracksDrawer,
@@ -16,7 +18,8 @@ from drawers import (
     FrameNumberDrawer,
     PassInterceptionDrawer,
     TacticalViewDrawer,
-    SpeedAndDistanceDrawer
+    SpeedAndDistanceDrawer,
+    FreeThrowDrawer
 )
 from configs import(
     STUBS_DEFAULT_PATH,
@@ -105,6 +108,57 @@ def main():
     player_distances_per_frame = speed_and_distance_calculator.calculate_distance(tactical_player_positions)
     player_speed_per_frame = speed_and_distance_calculator.calculate_speed(player_distances_per_frame)
 
+    # Free Throw Detection
+    free_throw_detector = FreeThrowDetector()
+    free_throw_events = free_throw_detector.detect_free_throws(
+        tactical_player_positions, 
+        ball_aquisition, 
+        player_assignment
+    )
+    
+    # Print free throw detection summary
+    if free_throw_events:
+        summary = free_throw_detector.get_free_throw_summary(free_throw_events)
+        print(f"Free Throw Detection Summary:")
+        print(f"  Total Free Throws Detected: {summary['total_free_throws']}")
+        print(f"  Team 1 Free Throws: {summary['team1_free_throws']}")
+        print(f"  Team 2 Free Throws: {summary['team2_free_throws']}")
+        print(f"  Average Confidence: {summary['average_confidence']:.2f}")
+        print(f"  Frames with Free Throws: {summary['frames_with_free_throws']}")
+    else:
+        print("No free throw situations detected in the video.")
+
+    # Collect statistics throughout video processing
+    # Note: In a real implementation, you would detect actual basketball events
+    # like shots, rebounds, turnovers, etc. For now, we'll use example data
+    
+    # Example statistics for demonstration
+    team1_stats = {
+        'fgm': 2,  # Field goals made (2-pointers)
+        'fga': 3,  # Field goal attempts (2-pointers)
+        'fgm_3pt': 1,  # Three-point field goals made
+        'fga_3pt': 2,  # Three-point field goal attempts
+        'ftm': 3,  # Free throws made
+        'fta': 4,  # Free throw attempts
+        'offensive_rebounds': 5,
+        'defensive_rebounds': 8,
+        'turnovers': 1,
+        'possessions': 20
+    }
+    
+    team2_stats = {
+        'fgm': 1,  # Field goals made (2-pointers)
+        'fga': 4,  # Field goal attempts (2-pointers)
+        'fgm_3pt': 2,  # Three-point field goals made
+        'fga_3pt': 3,  # Three-point field goal attempts
+        'ftm': 2,  # Free throws made
+        'fta': 3,  # Free throw attempts
+        'offensive_rebounds': 3,
+        'defensive_rebounds': 10,
+        'turnovers': 5,
+        'possessions': 18
+    }
+
     # Draw output   
     # Initialize Drawers
     player_tracks_drawer = PlayerTracksDrawer()
@@ -115,6 +169,7 @@ def main():
     pass_and_interceptions_drawer = PassInterceptionDrawer()
     tactical_view_drawer = TacticalViewDrawer()
     speed_and_distance_drawer = SpeedAndDistanceDrawer()
+    free_throw_drawer = FreeThrowDrawer()
 
     ## Draw object Tracks
     output_video_frames = player_tracks_drawer.draw(video_frames, 
@@ -146,6 +201,14 @@ def main():
                                                          player_speed_per_frame
                                                          )
 
+    # Free Throw Detection Drawer
+    output_video_frames = free_throw_drawer.draw(output_video_frames,
+                                                free_throw_events,
+                                                tactical_player_positions,
+                                                player_assignment,
+                                                tactical_view_converter,
+                                                show_summary=True)
+
     ## Draw Tactical View
     output_video_frames = tactical_view_drawer.draw(output_video_frames,
                                                     tactical_view_converter.court_image_path,
@@ -159,6 +222,9 @@ def main():
 
     # Save video
     save_video(output_video_frames, args.output_video)
+    
+    # Display comprehensive four factors summary after processing entire clip
+    print_four_factors_summary(team1_stats, team2_stats, len(video_frames), fps=30.0)
 
 if __name__ == '__main__':
     main()

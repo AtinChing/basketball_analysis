@@ -161,6 +161,9 @@ docker run \
 - `team_assigner/`  
   – Uses zero-shot classification (Hugging Face or similar) to assign players to teams based on jersey color.
 
+- `basketball_statistics_calculator/`  
+  – Calculates the four factors of basketball analytics and other game statistics.
+
 - `configs/`  
   – Holds default paths for models, stubs, and output video.
 
