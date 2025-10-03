@@ -53,17 +53,17 @@ def main():
 
     # Run Detectors
     player_tracks = player_tracker.get_object_tracks(video_frames,
-                                       read_from_stub=True,
+                                       read_from_stub=False,
                                        stub_path=os.path.join(args.stub_path, 'player_track_stubs.pkl')
                                       )
     
     ball_tracks = ball_tracker.get_object_tracks(video_frames,
-                                                 read_from_stub=True,
+                                                 read_from_stub=False,
                                                  stub_path=os.path.join(args.stub_path, 'ball_track_stubs.pkl')
                                                 )
     ## Run KeyPoint Extractor
     court_keypoints_per_frame = court_keypoint_detector.get_court_keypoints(video_frames,
-                                                                    read_from_stub=True,
+                                                                    read_from_stub=False,
                                                                     stub_path=os.path.join(args.stub_path, 'court_key_points_stub.pkl')
                                                                     )
 
@@ -77,7 +77,7 @@ def main():
     team_assigner = TeamAssigner()
     player_assignment = team_assigner.get_player_teams_across_frames(video_frames,
                                                                     player_tracks,
-                                                                    read_from_stub=True,
+                                                                    read_from_stub=False,
                                                                     stub_path=os.path.join(args.stub_path, 'player_assignment_stub.pkl')
                                                                     )
 
@@ -126,7 +126,83 @@ def main():
         print(f"  Average Confidence: {summary['average_confidence']:.2f}")
         print(f"  Frames with Free Throws: {summary['frames_with_free_throws']}")
     else:
+        # Provide a detailed diagnostic summary of how close frames were to detection
+        max_confidence = 0.0
+        max_conf_frame = -1
+        best_formation = None
+        best_ball_at_line = False
+
+        frames_with_one_at_line = 0
+        frames_with_sufficient_lane = 0
+        frames_with_ball_holder_at_line = 0
+        frames_meeting_all_three = 0
+
+        blockers_counts = {
+            'line_presence': 0,              # not exactly one player at a line
+            'lane_occupancy': 0,             # insufficient players in lane
+            'possession_alignment': 0        # ball holder not at line
+        }
+
+        for frame_num, frame_positions in enumerate(tactical_player_positions):
+            if not frame_positions:
+                continue
+
+            frame_ball_possession = ball_aquisition[frame_num] if frame_num < len(ball_aquisition) else -1
+            formation = free_throw_detector.analyze_player_formation(frame_positions, 0)
+
+            total_at_lines = len(formation['players_at_left_line']) + len(formation['players_at_right_line'])
+            players_in_lane = formation['total_players_in_lane']
+            all_players_at_lines = formation['players_at_left_line'] + formation['players_at_right_line']
+            ball_at_line = frame_ball_possession in all_players_at_lines
+
+            if total_at_lines == 1:
+                frames_with_one_at_line += 1
+            if players_in_lane >= free_throw_detector.min_players_in_lane:
+                frames_with_sufficient_lane += 1
+            if ball_at_line:
+                frames_with_ball_holder_at_line += 1
+            if (total_at_lines == 1 and
+                players_in_lane >= free_throw_detector.min_players_in_lane and
+                ball_at_line):
+                frames_meeting_all_three += 1
+
+            confidence = free_throw_detector.calculate_free_throw_confidence(formation, frame_ball_possession, 0)
+            if confidence > max_confidence:
+                max_confidence = confidence
+                max_conf_frame = frame_num
+                best_formation = formation
+                best_ball_at_line = ball_at_line
+
+            if total_at_lines != 1:
+                blockers_counts['line_presence'] += 1
+            if players_in_lane < free_throw_detector.min_players_in_lane:
+                blockers_counts['lane_occupancy'] += 1
+            if not ball_at_line:
+                blockers_counts['possession_alignment'] += 1
+
         print("No free throw situations detected in the video.")
+        print("Diagnostic summary:")
+        print(f"  Max confidence observed: {max_confidence:.2f} (threshold {free_throw_detector.confidence_threshold:.2f}) at frame {max_conf_frame if max_conf_frame != -1 else 'N/A'}")
+        if max_conf_frame != -1 and best_formation is not None:
+            total_at_lines = len(best_formation['players_at_left_line']) + len(best_formation['players_at_right_line'])
+            players_in_lane = best_formation['total_players_in_lane']
+            line_factor = (0.4 if total_at_lines == 1 else max(0.0, 0.4 - max(0, total_at_lines - 1) * 0.2))
+            lane_factor = (0.3 if players_in_lane >= free_throw_detector.min_players_in_lane else (players_in_lane / max(1, free_throw_detector.min_players_in_lane)) * 0.3)
+            possession_factor = 0.3 if best_ball_at_line else 0.0
+            gap = max(0.0, free_throw_detector.confidence_threshold - max_confidence)
+            print(f"  Best-frame factors: line={line_factor:.2f}, lane={lane_factor:.2f}, possession={possession_factor:.2f}")
+            print(f"  Players at lines (L,R): ({len(best_formation['players_at_left_line'])},{len(best_formation['players_at_right_line'])}); in lane: {players_in_lane}")
+            print(f"  Ball holder at line: {best_ball_at_line}")
+            print(f"  Confidence gap to threshold: {gap:.2f}")
+        print("  Condition coverage across frames:")
+        print(f"    Exactly one player at a line: {frames_with_one_at_line}")
+        print(f"    Sufficient lane occupancy (>= {free_throw_detector.min_players_in_lane}): {frames_with_sufficient_lane}")
+        print(f"    Ball holder at a line: {frames_with_ball_holder_at_line}")
+        print(f"    Frames meeting all three conditions: {frames_meeting_all_three}")
+        print("  Most common blockers (frame counts):")
+        print(f"    Line presence issue: {blockers_counts['line_presence']}")
+        print(f"    Lane occupancy issue: {blockers_counts['lane_occupancy']}")
+        print(f"    Possession alignment issue: {blockers_counts['possession_alignment']}")
 
     # Collect statistics throughout video processing
     # Note: In a real implementation, you would detect actual basketball events

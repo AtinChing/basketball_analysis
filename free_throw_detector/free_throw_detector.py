@@ -34,10 +34,10 @@ class FreeThrowDetector:
             max_players_at_line (int): Maximum number of players allowed at free throw line
             confidence_threshold (float): Minimum confidence for free throw detection
         """
-        self.free_throw_line_tolerance = 8.0  # tactical view units
+        self.free_throw_line_tolerance = 16.0  # tactical view units
         self.min_players_in_lane = 2  # minimum players in lane area
         self.max_players_at_line = 1  # only shooter should be at line
-        self.confidence_threshold = 0.6
+        self.confidence_threshold = 0.4
         
         # Free throw line positions in tactical view (from tactical_view_converter)
         # Left free throw line: positions 8-9, Right free throw line: positions 15-16
